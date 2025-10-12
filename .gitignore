@@ -5,12 +5,18 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+venv/
 .venv/
 .env
 .pytest_cache/
 .coverage
+
+# Local database
+wishlist.db
+
 # IDE
 .vscode/
 .idea/
+
 # OS
 .DS_Store
