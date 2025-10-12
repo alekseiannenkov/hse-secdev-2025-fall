@@ -1,57 +1,75 @@
-from fastapi import FastAPI, HTTPException, Request
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-app = FastAPI(title="SecDev Course App", version="0.1.0")
+from app.core.db import init_db
+from app.routers import auth, items, wishes
 
-
-class ApiError(Exception):
-    def __init__(self, code: str, message: str, status: int = 400):
-        self.code = code
-        self.message = message
-        self.status = status
+# --- Создание БД при импорте (нужно для pytest, чтобы таблицы существовали) ---
+init_db()
 
 
-@app.exception_handler(ApiError)
-async def api_error_handler(request: Request, exc: ApiError):
-    return JSONResponse(
-        status_code=exc.status,
-        content={"error": {"code": exc.code, "message": exc.message}},
-    )
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Повторный вызов init_db() безопасен: создаёт таблицы, если их нет
+    init_db()
+    yield
 
 
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    # Normalize FastAPI HTTPException into our error envelope
-    detail = exc.detail if isinstance(exc.detail, str) else "http_error"
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"error": {"code": "http_error", "message": detail}},
-    )
+app = FastAPI(title="Wishlist", lifespan=lifespan)
 
 
-@app.get("/health")
+# --- Подключение роутеров ---
+app.include_router(auth.router)
+app.include_router(wishes.router)
+app.include_router(items.router)
+
+
+# --- Метаданные / здоровье ---
+@app.get("/")
+def root():
+    return {"status": "ok", "app": "Wishlist"}
+
+
+@app.get("/health", tags=["meta"])
 def health():
     return {"status": "ok"}
 
 
-# Example minimal entity (for tests/demo)
-_DB = {"items": []}
+# --- Единый формат ошибок (для тестов и API) ---
+def _code_for_status(status_code: int) -> str:
+    """Возвращает код ошибки в нашем формате."""
+    return {
+        400: "bad_request",
+        401: "unauthorized",
+        403: "forbidden",
+        404: "not_found",
+        409: "conflict",
+        422: "validation_error",
+        500: "internal_error",
+    }.get(status_code, "http_error")
 
 
-@app.post("/items")
-def create_item(name: str):
-    if not name or len(name) > 100:
-        raise ApiError(
-            code="validation_error", message="name must be 1..100 chars", status=422
-        )
-    item = {"id": len(_DB["items"]) + 1, "name": name}
-    _DB["items"].append(item)
-    return item
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Все стандартные HTTP-ошибки → {"error": {...}}"""
+    if isinstance(exc.detail, dict) and "error" in exc.detail:
+        payload = exc.detail
+    else:
+        payload = {
+            "error": {
+                "code": _code_for_status(exc.status_code),
+                "message": str(exc.detail),
+            }
+        }
+    return JSONResponse(payload, status_code=exc.status_code)
 
 
-@app.get("/items/{item_id}")
-def get_item(item_id: int):
-    for it in _DB["items"]:
-        if it["id"] == item_id:
-            return it
-    raise ApiError(code="not_found", message="item not found", status=404)
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Ошибки валидации схем FastAPI / Pydantic."""
+    payload = {"error": {"code": "validation_error", "details": exc.errors()}}
+    return JSONResponse(payload, status_code=422)
