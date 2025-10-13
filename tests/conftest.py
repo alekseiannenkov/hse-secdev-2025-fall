@@ -1,6 +1,6 @@
 # tests/conftest.py
-import sys
 from pathlib import Path
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]  # корень репозитория
 if str(ROOT) not in sys.path:
