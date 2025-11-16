@@ -5,9 +5,7 @@ from pydantic import BaseModel, Field
 
 class Settings(BaseModel):
     APP_NAME: str = "Wishlist"
-    APP_ENV: str = Field(
-        default=os.getenv("APP_ENV", "dev")
-    )
+    APP_ENV: str = Field(default=os.getenv("APP_ENV", "dev"))
     SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-insecure-key")
     DB_URL: str = os.getenv("DB_URL", "sqlite:///./wishlist.db")
 
