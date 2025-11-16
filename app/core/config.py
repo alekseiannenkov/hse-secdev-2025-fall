@@ -7,7 +7,7 @@ class Settings(BaseModel):
     APP_NAME: str = "Wishlist"
     APP_ENV: str = Field(
         default=os.getenv("APP_ENV", "dev")
-    )  # dev / test / prod / stage
+    )
     SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-insecure-key")
     DB_URL: str = os.getenv("DB_URL", "sqlite:///./wishlist.db")
 
@@ -22,7 +22,7 @@ class Settings(BaseModel):
 
     def __init__(self, **data):
         super().__init__(**data)
-        # P06: защитный контроль для секретного ключа
+
         if self.APP_ENV in {"prod", "stage"} and self.SECRET_KEY == "dev-insecure-key":
             raise ValueError(
                 "Insecure SECRET_KEY is not allowed in APP_ENV=prod/stage. "
