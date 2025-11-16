@@ -10,7 +10,6 @@ class Settings(BaseModel):
         default=os.getenv("APP_ENV", "dev")
     )  # dev / test / prod / stage
     SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-insecure-key")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
     DB_URL: str = os.getenv("DB_URL", "sqlite:///./wishlist.db")
 
     def __init__(self, **data):
@@ -20,6 +19,14 @@ class Settings(BaseModel):
                 "Insecure SECRET_KEY is not allowed in APP_ENV=prod/stage. "
                 "Set SECRET_KEY via environment."
             )
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(
+        os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", str(60 * 24))
+    )
+
+    HTTP_CONNECT_TIMEOUT: float = float(os.getenv("HTTP_CONNECT_TIMEOUT", "2.0"))
+    HTTP_READ_TIMEOUT: float = float(os.getenv("HTTP_READ_TIMEOUT", "5.0"))
+    HTTP_TOTAL_TIMEOUT: float = float(os.getenv("HTTP_TOTAL_TIMEOUT", "6.0"))
+    HTTP_MAX_RETRIES: int = int(os.getenv("HTTP_MAX_RETRIES", "3"))
 
 
 settings = Settings()
