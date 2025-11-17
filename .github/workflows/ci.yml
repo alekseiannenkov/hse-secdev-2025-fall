@@ -63,10 +63,11 @@ jobs:
         run: docker build -t hse-wishlist:ci .
 
       - name: Scan image with Trivy
-        uses: aquasecurity/trivy-action@v0.33.1
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: hse-wishlist:ci
           format: 'table'
-          exit-code: '0'       # чтобы CI не падал из-за найденных HIGH/CRITICAL
+          exit-code: '0'
           ignore-unfixed: true
           severity: CRITICAL,HIGH
+
