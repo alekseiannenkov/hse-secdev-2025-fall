@@ -48,7 +48,7 @@ jobs:
           chmod +x /tmp/hadolint
 
       - name: Run hadolint on Dockerfile
-        run: /tmp/hadolint Dockerfile
+        run: /tmp/hadolint -c hadolint.yml Dockerfile
 
   trivy:
     runs-on: ubuntu-latest
@@ -63,7 +63,7 @@ jobs:
         run: docker build -t hse-wishlist:ci .
 
       - name: Scan image with Trivy
-        uses: aquasecurity/trivy-action@v0.28.0
+        uses: aquasecurity/trivy-action@v0.33.1
         with:
           image-ref: hse-wishlist:ci
           format: 'table'
