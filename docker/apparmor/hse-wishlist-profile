@@ -1,0 +1,11 @@
+profile hse-wishlist-profile flags=(attach_disconnected) {
+  network,
+
+  /data/** rw,
+  /app/** r,
+
+  deny /bin/** mrwklx,
+  deny /usr/bin/** mrwklx,
+
+  file,
+}

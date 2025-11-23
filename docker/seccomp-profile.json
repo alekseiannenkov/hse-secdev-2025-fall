@@ -1,0 +1,25 @@
+{
+  "defaultAction": "SCMP_ACT_ERRNO",
+  "syscalls": [
+    {
+      "names": [
+        "read",
+        "write",
+        "exit",
+        "exit_group",
+        "futex",
+        "clock_gettime",
+        "rt_sigaction",
+        "rt_sigprocmask",
+        "brk",
+        "arch_prctl",
+        "mmap",
+        "munmap",
+        "close",
+        "restart_syscall",
+        "openat"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    }
+  ]
+}
