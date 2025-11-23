@@ -6,22 +6,41 @@ services:
       context: .
       dockerfile: Dockerfile
     image: hse-wishlist:latest
+
     env_file:
       - .env
+
     ports:
       - "8000:8000"
+
     restart: unless-stopped
 
-    # Healthcheck на тот же /health, что и в тестах
+    read_only: true
+
+    volumes:
+      - db-data:/data
+
+    cap_drop:
+      - ALL
+
+    security_opt:
+      - no-new-privileges:true
+      - seccomp:./docker/seccomp-profile.json
+      - apparmor:hse-wishlist-profile
+
+    # Healthcheck (как в тестах)
     healthcheck:
       test:
         [
           "CMD",
           "python",
           "-c",
-          "import http.client, sys; conn = http.client.HTTPConnection('127.0.0.1', 8000, timeout=2); conn.request('GET', '/health'); resp = conn.getresponse(); sys.exit(0 if resp.status == 200 else 1)",
+          "import http.client, sys; conn = http.client.HTTPConnection('127.0.0.1', 8000, timeout=2); conn.request('GET', '/health'); resp = conn.getresponse(); sys.exit(0 if resp.status == 200 else 1)"
         ]
       interval: 30s
       timeout: 3s
       retries: 3
       start_period: 10s
+
+volumes:
+  db-data:
