@@ -2,65 +2,86 @@ name: CI
 
 on:
   push:
-    branches: [ main, p07-container-hardening ]
+    branches:
+      - main
+      - p07-container-hardening
+      - p08-cicd-minimal
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
 
-      - name: Install deps
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install ruff black isort pytest
+          pip install -r requirements-dev.txt
 
-      - name: Lint (ruff)
-        run: ruff check .
+      - name: Ruff
+        run: ruff check app tests
 
-      - name: Format check (black)
-        run: black --check .
+      - name: Black
+        run: black --check app tests
 
-      - name: Imports check (isort)
-        run: isort --check-only .
+      - name: Isort
+        run: isort --check-only app tests
 
-      - name: Tests
-        run: pytest -q
-
-  hadolint:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install hadolint
+      - name: Pytest
         run: |
-          wget -O /tmp/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
-          chmod +x /tmp/hadolint
+          mkdir -p reports
+          pytest -q --junitxml=reports/pytest-${{ matrix.python-version }}.xml
 
-      - name: Run hadolint on Dockerfile
-        run: /tmp/hadolint -c hadolint.yml Dockerfile
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-reports-py${{ matrix.python-version }}
+          path: reports/
 
-  trivy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Docker (already available on ubuntu-latest)
+      - name: Docker version
         run: docker version
 
       - name: Build Docker image
         run: docker build -t hse-wishlist:ci .
+
+      - name: Run hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
 
       - name: Scan image with Trivy
         uses: aquasecurity/trivy-action@0.28.0
@@ -71,3 +92,11 @@ jobs:
           ignore-unfixed: true
           severity: CRITICAL,HIGH
 
+  deploy-mock:
+    name: Deploy (mock)
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mock deploy
+        run: echo "Mock deploy hse-wishlist to staging environment"
