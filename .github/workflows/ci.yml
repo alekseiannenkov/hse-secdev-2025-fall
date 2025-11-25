@@ -95,7 +95,6 @@ jobs:
   deploy-mock:
     name: Deploy (mock)
     needs: test
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Mock deploy
