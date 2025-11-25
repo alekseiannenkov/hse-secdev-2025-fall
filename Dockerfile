@@ -5,7 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN python -m pip install --no-cache-dir --upgrade pip
+RUN python -m pip install --no-cache-dir --upgrade "pip==24.3.1"
 
 
 COPY requirements.txt .
