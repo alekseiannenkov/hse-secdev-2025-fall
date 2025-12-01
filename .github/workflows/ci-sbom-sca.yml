@@ -24,8 +24,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y jq
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/scripts/install.sh | sh -s -- -b /usr/local/bin v1.8.0
-          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/scripts/install.sh | sh -s -- -b /usr/local/bin v0.74.0
+          # Установка Syft (официальная команда)
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+            | sudo sh -s -- -b /usr/local/bin
+          # Установка Grype (официальная команда)
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh \
+            | sudo sh -s -- -b /usr/local/bin
           syft version
           grype version
 
