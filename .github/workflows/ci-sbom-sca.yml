@@ -1,0 +1,79 @@
+name: P09 – SBOM & SCA
+
+on:
+  push:
+    paths:
+      - "**/*.py"
+      - "requirements.txt"
+      - ".github/workflows/ci-sbom-sca.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: sbom-sca-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sbom-sca:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install tools (Syft, Grype, jq)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+          # Установка Syft (официальная команда)
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+            | sudo sh -s -- -b /usr/local/bin
+          # Установка Grype (официальная команда)
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh \
+            | sudo sh -s -- -b /usr/local/bin
+          syft version
+          grype version
+
+      # --- Generate SBOM (Syft) ---
+      - name: Generate SBOM (CycloneDX)
+        run: |
+          mkdir -p EVIDENCE/P09
+          syft dir:. -o cyclonedx-json > EVIDENCE/P09/sbom.json
+
+      # --- Run SCA (Grype) using SBOM ---
+      - name: Run SCA via Grype
+        run: |
+          grype sbom:EVIDENCE/P09/sbom.json -o json > EVIDENCE/P09/sca_report.json
+
+      # --- Create summary markdown ---
+      - name: Generate SCA summary
+        run: |
+          CRIT=$(jq '[.matches[] | select(.vulnerability.severity=="Critical")] | length' EVIDENCE/P09/sca_report.json)
+          HIGH=$(jq '[.matches[] | select(.vulnerability.severity=="High")] | length' EVIDENCE/P09/sca_report.json)
+          MED=$(jq '[.matches[] | select(.vulnerability.severity=="Medium")] | length' EVIDENCE/P09/sca_report.json)
+          LOW=$(jq '[.matches[] | select(.vulnerability.severity=="Low")] | length' EVIDENCE/P09/sca_report.json)
+
+          echo "## SCA Summary" > EVIDENCE/P09/sca_summary.md
+          echo "" >> EVIDENCE/P09/sca_summary.md
+          echo "- Critical: $CRIT" >> EVIDENCE/P09/sca_summary.md
+          echo "- High: $HIGH" >> EVIDENCE/P09/sca_summary.md
+          echo "- Medium: $MED" >> EVIDENCE/P09/sca_summary.md
+          echo "- Low: $LOW" >> EVIDENCE/P09/sca_summary.md
+
+      # --- Upload artifacts (required for ★★) ---
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: EVIDENCE/P09/sbom.json
+
+      - name: Upload SCA report
+        uses: actions/upload-artifact@v4
+        with:
+          name: sca-report
+          path: EVIDENCE/P09/sca_report.json
+
+      - name: Upload summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: sca-summary
+          path: EVIDENCE/P09/sca_summary.md

@@ -18,3 +18,4 @@ def test_register_and_login():
     )
     assert r2.status_code == 200
     assert r2.json()["access_token"]
+    # com
