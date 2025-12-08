@@ -1,0 +1,10 @@
+title = "Wishlist Gitleaks config"
+
+[allowlist]
+  description = "Учебные тестовые ключи, добавленные для демонстрации Gitleaks"
+  paths = [
+    "utils/test_secret.py"
+  ]
+  regexes = [
+    '''AKIA9999999999EXAMPLEKEY'''
+  ]

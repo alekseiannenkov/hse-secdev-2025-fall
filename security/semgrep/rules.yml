@@ -1,0 +1,22 @@
+rules:
+  - id: wishlist-insecure-md5
+    languages: [python]
+    severity: WARNING
+    message: "Используется hashlib.md5 — слабый алгоритм хеширования. Используйте более устойчивый алгоритм (например, hashlib.sha256 или bcrypt/passlib)."
+    patterns:
+      - pattern: hashlib.md5($X)
+    metadata:
+      category: security
+      cwe: "CWE-327"
+      OWASP: "A02:2021 Cryptographic Failures"
+
+  - id: wishlist-fastapi-debug-true
+    languages: [python]
+    severity: WARNING
+    message: "FastAPI-приложение запущено с debug=True. В проде это может раскрывать лишнюю информацию об ошибках."
+    pattern: |
+      FastAPI(debug=True)
+    metadata:
+      category: security-misconfiguration
+      cwe: "CWE-209"
+      OWASP: "A05:2021 Security Misconfiguration"
