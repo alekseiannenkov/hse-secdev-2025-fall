@@ -1,0 +1,8 @@
+waivers:
+  - id: "CVE-2023-32681"
+    package: "urllib3"
+    severity: "High"
+    reason: "Зависимость приходит транзитивно через requests; фикса нет в текущем релизе upstream, эксплойт невозможен в контексте проекта."
+    created_at: "2025-01-30"
+    reconsider_after: "2025-04-01"
+    status: "temporary"
