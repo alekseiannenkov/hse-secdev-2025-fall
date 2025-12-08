@@ -1,14 +1,10 @@
 title = "Wishlist Gitleaks config"
 
 [allowlist]
-description = "Глобальный allowlist для артефактов и заведомо не-секретных значений"
-
-# Не считаем EVIDENCE секретами
-paths = [
-  '''EVIDENCE/.*'''
-]
-
-# Игнор фейковых тестовых ключей типа TEST_API_KEY_xxx
-regexes = [
-  '''TEST_API_KEY_[A-Z0-9]{8}'''
-]
+  description = "Учебные тестовые ключи, добавленные для демонстрации Gitleaks"
+  paths = [
+    "utils/test_secret.py"
+  ]
+  regexes = [
+    '''AKIA9999999999EXAMPLEKEY'''
+  ]
