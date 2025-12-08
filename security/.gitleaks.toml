@@ -8,7 +8,7 @@ paths = [
   '''EVIDENCE/.*'''
 ]
 
-# Пример игнорирования ложноположительных "секретов" в тестах
-[[allowlist.regexes]]
-description = "Игнор фейковых тестовых ключей типа TEST_API_KEY_xxx"
-regex = '''TEST_API_KEY_[A-Z0-9]{8}'''
+# Игнор фейковых тестовых ключей типа TEST_API_KEY_xxx
+regexes = [
+  '''TEST_API_KEY_[A-Z0-9]{8}'''
+]
