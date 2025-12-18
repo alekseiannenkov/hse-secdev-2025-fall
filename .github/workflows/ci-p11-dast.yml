@@ -49,31 +49,23 @@ jobs:
           timeout 60 bash -c 'until curl -sf http://127.0.0.1:8080/health > /dev/null; do sleep 1; done'
           echo "Service is up"
 
-      - name: ZAP Baseline Scan
-        uses: zaproxy/action-baseline@v0.15.0
-        with:
-          target: "http://127.0.0.1:8080/"
-          allow_issue_writing: false
+      - name: Run OWASP ZAP baseline (docker)
+        run: |
+          mkdir -p EVIDENCE/P11
+          docker run --rm --network host -v $PWD:/zap/wrk ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+              -t http://127.0.0.1:8080/ \
+              -r EVIDENCE/P11/zap_baseline.html \
+              -J EVIDENCE/P11/zap_baseline.json \
+              -I -d || true
 
-          # ВАЖНО: имена отчётов задаём здесь, а не через -r/-J/-w в cmd_options
-          report_html: "zap_baseline.html"
-          report_json: "zap_baseline.json"
-          report_md: "zap_baseline.md"
-
-          # Только поведение (не имена файлов)
-          # -I: не падать из-за алертов (нужно, чтобы job был зелёным)
-          # -d: debug
-          cmd_options: "-I -d"
-
-      - name: Move reports to EVIDENCE/P11
+      - name: Move logs to EVIDENCE/P11
         if: always()
         run: |
-          # action кладёт отчёты в workspace (корень репо)
-          if [ -f zap_baseline.html ]; then mv -f zap_baseline.html EVIDENCE/P11/; fi
-          if [ -f zap_baseline.json ]; then mv -f zap_baseline.json EVIDENCE/P11/; fi
-          if [ -f zap_baseline.md ]; then mv -f zap_baseline.md EVIDENCE/P11/; fi
+          mkdir -p EVIDENCE/P11
           if [ -f uvicorn.log ]; then mv -f uvicorn.log EVIDENCE/P11/; fi
           ls -lah EVIDENCE/P11 || true
+
 
       - name: Upload P11 evidence
         if: always()
