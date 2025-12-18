@@ -46,32 +46,38 @@ jobs:
           timeout 60 bash -c 'until curl -sf http://127.0.0.1:8080/health > /dev/null; do sleep 1; done'
           echo "Service is up"
 
-      - name: Ensure evidence dir + fix workspace permissions
+      - name: Prepare evidence dir + fix permissions
         run: |
           mkdir -p EVIDENCE/P11
-          # Важно: контейнер ZAP должен иметь право писать в workspace
           chmod -R a+w "$GITHUB_WORKSPACE"
           chmod -R a+w EVIDENCE/P11
           ls -lah
-          ls -lah EVIDENCE/P11
 
-      - name: Run OWASP ZAP baseline (docker) and write reports to EVIDENCE
+      - name: Run OWASP ZAP baseline (docker)
         run: |
           set -euxo pipefail
 
+          # ВАЖНО: -r и -J без путей (только имена файлов),
+          # иначе baseline-скрипт "склеивает" путь с reportDir и ломается.
           docker run --rm --network host --user 0:0 \
             -v "$GITHUB_WORKSPACE:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py \
               -t http://127.0.0.1:8080/ \
-              -r /zap/wrk/EVIDENCE/P11/zap_baseline.html \
-              -J /zap/wrk/EVIDENCE/P11/zap_baseline.json \
+              -r zap_baseline.html \
+              -J zap_baseline.json \
               -I -d || true
 
-          echo "EVIDENCE/P11 after ZAP:"
+          echo "Workspace after ZAP:"
+          ls -lah
+
+          mkdir -p EVIDENCE/P11
+          if [ -f zap_baseline.html ]; then mv -f zap_baseline.html EVIDENCE/P11/; fi
+          if [ -f zap_baseline.json ]; then mv -f zap_baseline.json EVIDENCE/P11/; fi
+
+          echo "EVIDENCE/P11 after moving reports:"
           ls -lah EVIDENCE/P11
 
-          # Если отчёты не созданы — лучше упасть и сразу увидеть проблему,
-          # чем снова получить зелёный job с пустым артефактом.
+          # Теперь проверяем уже в EVIDENCE/P11
           test -f EVIDENCE/P11/zap_baseline.html
           test -f EVIDENCE/P11/zap_baseline.json
 
