@@ -1,0 +1,89 @@
+name: Security - DAST (P11, ZAP baseline)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "app/**"
+      - "docker/**"
+      - "Dockerfile"
+      - "docker-compose.yaml"
+      - ".env.example"
+      - ".github/workflows/ci-p11-dast.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dast_p11:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare env + evidence dir
+        run: |
+          mkdir -p EVIDENCE/P11
+          # docker-compose.yaml ожидает .env
+          cp .env.example .env
+
+      - name: Build & run service via Docker Compose
+        run: |
+          docker compose -f docker-compose.yaml up -d --build
+
+      - name: Wait for service health
+        run: |
+          echo "Waiting for http://localhost:8000/health ..."
+          timeout 90 bash -c 'until curl -sf http://localhost:8000/health >/dev/null; do sleep 2; done'
+          echo "Service is up."
+
+      - name: Run OWASP ZAP baseline
+        run: |
+          docker run --rm --network host -v $PWD:/zap/wrk owasp/zap2docker-stable \
+            zap-baseline.py \
+              -t http://localhost:8000 \
+              -r EVIDENCE/P11/zap_baseline.html \
+              -J EVIDENCE/P11/zap_baseline.json \
+              -d || true
+
+      - name: Generate ZAP summary (counts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+          # ZAP baseline json может быть разного формата, но alerts обычно лежат в site[].alerts[]
+          HIGH=$(jq '[.site[].alerts[]? | select(.riskdesc|test("High"))] | length' EVIDENCE/P11/zap_baseline.json 2>/dev/null || echo 0)
+          MED=$(jq '[.site[].alerts[]? | select(.riskdesc|test("Medium"))] | length' EVIDENCE/P11/zap_baseline.json 2>/dev/null || echo 0)
+          LOW=$(jq '[.site[].alerts[]? | select(.riskdesc|test("Low"))] | length' EVIDENCE/P11/zap_baseline.json 2>/dev/null || echo 0)
+
+          {
+            echo "## ZAP Baseline Summary"
+            echo ""
+            echo "- Target: http://localhost:8000"
+            echo "- High: $HIGH"
+            echo "- Medium: $MED"
+            echo "- Low: $LOW"
+          } > EVIDENCE/P11/zap_summary.md
+
+      - name: Upload P11 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: P11_EVIDENCE
+          path: EVIDENCE/P11
+
+      - name: Dump compose logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker-compose.yaml ps
+          docker compose -f docker-compose.yaml logs --no-color | tail -n 200
+
+      - name: Shutdown
+        if: always()
+        run: |
+          docker compose -f docker-compose.yaml down -v
