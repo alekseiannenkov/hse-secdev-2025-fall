@@ -50,10 +50,6 @@ jobs:
       - name: Ensure evidence dirs
         run: |
           mkdir -p EVIDENCE/P12
-          # Заглушки, чтобы артефакт не был пустым, даже если какой-то шаг упадёт/не даст stdout
-          echo "{}" > EVIDENCE/P12/hadolint_report.json
-          echo "{}" > EVIDENCE/P12/checkov_report.json
-          echo "{}" > EVIDENCE/P12/trivy_report.json
           ls -lah EVIDENCE/P12
 
       # -------------------------
@@ -71,7 +67,7 @@ jobs:
             hadolint --config /work/security/hadolint.yaml -f json /work/Dockerfile \
             > EVIDENCE/P12/hadolint_report.json || true
 
-          # Если вдруг пусто — оставим валидный JSON
+          # если вдруг пусто — валидный JSON
           if [ ! -s EVIDENCE/P12/hadolint_report.json ]; then
             echo "[]" > EVIDENCE/P12/hadolint_report.json
           fi
@@ -86,7 +82,6 @@ jobs:
           set -eux
           mkdir -p EVIDENCE/P12
 
-          # Ищем compose-файл в корне или на глубине до 3 каталогов
           COMPOSE_FILE="$(find . -maxdepth 3 -type f \( \
               -name 'docker-compose.yml' -o -name 'docker-compose.yaml' -o \
               -name 'compose.yml' -o -name 'compose.yaml' -o \
@@ -94,26 +89,29 @@ jobs:
             \) | head -n 1 || true)"
 
           if [ -z "$COMPOSE_FILE" ]; then
-            echo '{"error":"No docker-compose/compose IaC file found in repo"}' > EVIDENCE/P12/checkov_report.json
+            echo '{"error":"No docker-compose/compose file found for Checkov"}' > EVIDENCE/P12/checkov_report.json
             exit 0
           fi
 
           echo "Checkov will scan: $COMPOSE_FILE"
 
-          # ВАЖНО: Checkov сам пишет отчёт в файл (без stdout-редиректов)
+          # Пишем stdout в файл, stderr в отдельный лог (чтобы не было 0 байт)
           docker run --rm -v "$PWD:/work:rw" bridgecrew/checkov:latest \
             --framework docker_compose \
+            --config-file /work/security/checkov.yaml \
             -f "/work/${COMPOSE_FILE#./}" \
             -o json \
             --soft-fail \
-            --output-file-path "/work/EVIDENCE/P12/checkov_report.json" || true
+            > EVIDENCE/P12/checkov_report.json \
+            2> EVIDENCE/P12/checkov_stderr.log || true
 
           if [ ! -s EVIDENCE/P12/checkov_report.json ]; then
-            echo '{"error":"Checkov did not produce report file (likely parse/config error). Check CI logs."}' \
+            echo '{"error":"Checkov produced empty output; see EVIDENCE/P12/checkov_stderr.log"}' \
               > EVIDENCE/P12/checkov_report.json
           fi
 
           ls -lah EVIDENCE/P12/checkov_report.json
+          ls -lah EVIDENCE/P12/checkov_stderr.log || true
 
       # -------------------------
       # C3: Trivy (image)
@@ -123,10 +121,8 @@ jobs:
           set -eux
           mkdir -p EVIDENCE/P12
 
-          # Сохраняем полный лог сборки (для диагностики и доказательств)
           (docker build -t wishlist:${{ github.sha }} .) 2>&1 | tee EVIDENCE/P12/docker_build.log
 
-          # Проверяем, что образ реально существует
           docker image inspect wishlist:${{ github.sha }} >/dev/null 2>&1
 
       - name: Trivy (image vuln scan)
@@ -134,25 +130,27 @@ jobs:
           set -eux
           mkdir -p EVIDENCE/P12
 
-          # Если образа нет — фиксируем причину и не валим job (чтобы был артефакт с логом)
           if ! docker image inspect wishlist:${{ github.sha }} >/dev/null 2>&1; then
-            echo '{"error":"Docker image wishlist:${{ github.sha }} not found. See EVIDENCE/P12/docker_build.log"}' \
+            echo '{"error":"Docker image wishlist:${{ github.sha }} not found; see docker_build.log"}' \
               > EVIDENCE/P12/trivy_report.json
             exit 0
           fi
 
-          docker run --rm -v "$PWD:/work:rw" aquasec/trivy:latest \
+          # ВАЖНО: пробрасываем docker.sock, иначе Trivy в контейнере не видит локальные образы
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD:/work:rw" aquasec/trivy:latest \
             image \
+              --config /work/security/trivy.yaml \
+              --scanners vuln \
               --format json \
               --output /work/EVIDENCE/P12/trivy_report.json \
-              --severity CRITICAL,HIGH \
-              --ignore-unfixed \
-              --timeout 10m \
+              --no-progress \
               wishlist:${{ github.sha }} \
             2> EVIDENCE/P12/trivy_stderr.log || true
 
           if [ ! -s EVIDENCE/P12/trivy_report.json ]; then
-            echo '{"error":"Trivy produced empty report. See EVIDENCE/P12/trivy_stderr.log"}' \
+            echo '{"error":"Trivy produced empty report; see EVIDENCE/P12/trivy_stderr.log"}' \
               > EVIDENCE/P12/trivy_report.json
           fi
 
