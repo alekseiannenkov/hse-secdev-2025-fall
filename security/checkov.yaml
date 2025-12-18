@@ -1,0 +1,11 @@
+# Checkov config for P12
+# Focus on Docker Compose IaC in this repo (compose.yaml / docker-compose.yaml).
+framework:
+  - docker_compose
+
+# Keep CI output readable.
+quiet: true
+
+# If some checks are clearly irrelevant/noisy for your project, add them here:
+# skip-check:
+#   - CKV2_DOCKER_*

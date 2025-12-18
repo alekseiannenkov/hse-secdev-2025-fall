@@ -5,7 +5,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: hse-wishlist:latest
+    # Avoid 'latest' tag for more predictable deployments and better supply-chain hygiene
+    image: hse-wishlist:0.1.0
 
     env_file:
       - .env

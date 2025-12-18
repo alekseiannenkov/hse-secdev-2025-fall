@@ -1,0 +1,5 @@
+# Hadolint config for P12
+# We ignore some rules that are noisy for Python projects with pip/apt usage patterns.
+ignored:
+  - DL3008  # Pin versions in apt-get install (not used in this Dockerfile)
+  - DL3013  # Pin versions in pip (requirements.txt controls versions)

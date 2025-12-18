@@ -1,0 +1,10 @@
+# Trivy config for P12
+# Keep the scan reasonably fast and actionable in CI.
+timeout: 10m
+ignore-unfixed: true
+vuln-type:
+  - os
+  - library
+severity:
+  - CRITICAL
+  - HIGH
