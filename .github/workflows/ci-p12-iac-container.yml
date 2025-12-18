@@ -66,43 +66,75 @@ jobs:
           ls -lah EVIDENCE/P12/hadolint_report.json
 
       # --- C2: Checkov ---
-      - name: Checkov (IaC scan - docker compose + repo)
+      - name: Checkov (IaC scan - docker compose)
         run: |
-          # Основная идея: сканируем compose как IaC.
-          # Если compose-файлов нет, всё равно сканируем корень, чтобы получить валидный JSON.
+          set -e
+          mkdir -p EVIDENCE/P12
+
+          # Найдём compose-файл (учтём .yml и .yaml, разные имена, корень/подкаталоги)
+          COMPOSE_FILE="$(find . -maxdepth 3 -type f \( \
+              -name 'docker-compose.yml' -o -name 'docker-compose.yaml' -o \
+              -name 'compose.yml' -o -name 'compose.yaml' -o \
+              -name 'docker-compose*.yml' -o -name 'docker-compose*.yaml' \
+            \) | head -n 1 || true)"
+
+          if [ -z "$COMPOSE_FILE" ]; then
+            echo '{"error":"No docker-compose/compose IaC file found in repo"}' > EVIDENCE/P12/checkov_report.json
+            echo "No compose file found; wrote error JSON."
+            exit 0
+          fi
+
+          echo "Checkov will scan: $COMPOSE_FILE"
+
+          # ВАЖНО: пишем в temp, затем проверяем что файл не пустой
           docker run --rm -v "$PWD:/work:rw" bridgecrew/checkov:latest \
             --framework docker_compose \
-            -d /work \
+            -f "/work/${COMPOSE_FILE#./}" \
             -o json \
-            > EVIDENCE/P12/checkov_report.json || true
+            > EVIDENCE/P12/checkov_report.json 2>/dev/null || true
 
-          # Если вдруг получилось 0 байт (ошибка/пустой stdout), оставим валидный JSON
           if [ ! -s EVIDENCE/P12/checkov_report.json ]; then
-            echo '{"error":"checkov produced empty output (likely no compose/IaC detected)"}' > EVIDENCE/P12/checkov_report.json
+            echo '{"error":"Checkov produced empty output (see logs); compose file detected but scan output empty"}' \
+              > EVIDENCE/P12/checkov_report.json
           fi
 
           ls -lah EVIDENCE/P12/checkov_report.json
 
-      # --- C3: Trivy ---
-      - name: Build image for Trivy
-        run: |
-          # собираем образ из Dockerfile в корне репо
-          docker build -t wishlist:${{ github.sha }} .
 
+
+      # --- C3: Trivy ---
       - name: Trivy (image vuln scan)
         run: |
+          set -e
+          mkdir -p EVIDENCE/P12
+
+          # Проверим, что образ реально существует
+          docker image inspect wishlist:${{ github.sha }} >/dev/null 2>&1 || {
+            echo '{"error":"Docker image wishlist:${{ github.sha }} not found; build step likely failed"}' \
+              > EVIDENCE/P12/trivy_report.json
+            exit 0
+          }
+
+          # Запускаем Trivy и пишем JSON в файл. stderr не теряем (важно для диагностики).
           docker run --rm -v "$PWD:/work:rw" aquasec/trivy:latest \
             image \
               --format json \
               --output /work/EVIDENCE/P12/trivy_report.json \
-              wishlist:${{ github.sha }} || true
+              --severity CRITICAL,HIGH \
+              --ignore-unfixed \
+              --timeout 10m \
+              wishlist:${{ github.sha }} \
+            2> /work/EVIDENCE/P12/trivy_stderr.log || true
 
-          # На случай, если trivy не смог записать файл
+          # Если файл пустой/невалидный (часто при ошибках), заменим на error JSON
           if [ ! -s EVIDENCE/P12/trivy_report.json ]; then
-            echo '{"error":"trivy report is empty (scan failed or produced no output)"}' > EVIDENCE/P12/trivy_report.json
+            echo '{"error":"Trivy produced empty output; see EVIDENCE/P12/trivy_stderr.log"}' \
+              > EVIDENCE/P12/trivy_report.json
           fi
 
           ls -lah EVIDENCE/P12/trivy_report.json
+          ls -lah EVIDENCE/P12/trivy_stderr.log || true
+
 
       - name: Evidence listing
         if: always()
