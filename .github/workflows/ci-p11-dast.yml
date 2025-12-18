@@ -29,9 +29,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Ensure evidence dirs
-        run: mkdir -p EVIDENCE/P11
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -49,44 +46,41 @@ jobs:
           timeout 60 bash -c 'until curl -sf http://127.0.0.1:8080/health > /dev/null; do sleep 1; done'
           echo "Service is up"
 
-      - name: Run OWASP ZAP baseline (docker)
+      - name: Ensure evidence dir + fix workspace permissions
         run: |
-          # На всякий случай покажем, где мы
-          pwd
+          mkdir -p EVIDENCE/P11
+          # Важно: контейнер ZAP должен иметь право писать в workspace
+          chmod -R a+w "$GITHUB_WORKSPACE"
+          chmod -R a+w EVIDENCE/P11
           ls -lah
+          ls -lah EVIDENCE/P11
 
-          # Запускаем ZAP и пишем отчёты ПРОСТО в корень репо
-          docker run --rm --network host -v $PWD:/zap/wrk ghcr.io/zaproxy/zaproxy:stable \
+      - name: Run OWASP ZAP baseline (docker) and write reports to EVIDENCE
+        run: |
+          set -euxo pipefail
+
+          docker run --rm --network host --user 0:0 \
+            -v "$GITHUB_WORKSPACE:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py \
               -t http://127.0.0.1:8080/ \
-              -r zap_baseline.html \
-              -J zap_baseline.json \
+              -r /zap/wrk/EVIDENCE/P11/zap_baseline.html \
+              -J /zap/wrk/EVIDENCE/P11/zap_baseline.json \
               -I -d || true
 
-          echo "After ZAP:"
-          ls -lah
+          echo "EVIDENCE/P11 after ZAP:"
+          ls -lah EVIDENCE/P11
 
+          # Если отчёты не созданы — лучше упасть и сразу увидеть проблему,
+          # чем снова получить зелёный job с пустым артефактом.
+          test -f EVIDENCE/P11/zap_baseline.html
+          test -f EVIDENCE/P11/zap_baseline.json
 
-      - name: Move reports to EVIDENCE/P11
+      - name: Move uvicorn log to EVIDENCE/P11
         if: always()
         run: |
           mkdir -p EVIDENCE/P11
-
-          # Печатаем, что есть (важно для отладки)
-          echo "Workspace files:"
-          ls -lah
-
-          # Переносим отчёты, если они появились
-          if [ -f zap_baseline.html ]; then mv -f zap_baseline.html EVIDENCE/P11/; fi
-          if [ -f zap_baseline.json ]; then mv -f zap_baseline.json EVIDENCE/P11/; fi
-
-          # Лог uvicorn тоже переносим
           if [ -f uvicorn.log ]; then mv -f uvicorn.log EVIDENCE/P11/; fi
-
-          echo "EVIDENCE/P11:"
           ls -lah EVIDENCE/P11 || true
-
-
 
       - name: Upload P11 evidence
         if: always()
