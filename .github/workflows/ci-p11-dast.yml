@@ -54,19 +54,24 @@ jobs:
         with:
           target: "http://127.0.0.1:8080/"
           allow_issue_writing: false
-          # cmd_options are passed to zap-baseline.py inside the container
-          # -I: do not return non-zero on alerts (keep job green)
-          # -r/-J: write HTML + JSON reports
-          cmd_options: >-
-            -I -d -r zap_baseline.html -J zap_baseline.json
+
+          # ВАЖНО: имена отчётов задаём здесь, а не через -r/-J/-w в cmd_options
+          report_html: "zap_baseline.html"
+          report_json: "zap_baseline.json"
+          report_md: "zap_baseline.md"
+
+          # Только поведение (не имена файлов)
+          # -I: не падать из-за алертов (нужно, чтобы job был зелёным)
+          # -d: debug
+          cmd_options: "-I -d"
 
       - name: Move reports to EVIDENCE/P11
         if: always()
         run: |
-          ls -lah
-          # action-baseline writes reports to workspace with the names we passed
+          # action кладёт отчёты в workspace (корень репо)
           if [ -f zap_baseline.html ]; then mv -f zap_baseline.html EVIDENCE/P11/; fi
           if [ -f zap_baseline.json ]; then mv -f zap_baseline.json EVIDENCE/P11/; fi
+          if [ -f zap_baseline.md ]; then mv -f zap_baseline.md EVIDENCE/P11/; fi
           if [ -f uvicorn.log ]; then mv -f uvicorn.log EVIDENCE/P11/; fi
           ls -lah EVIDENCE/P11 || true
 
