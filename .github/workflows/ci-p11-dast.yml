@@ -1,0 +1,96 @@
+name: Security - DAST (P11, ZAP baseline)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "app/**"
+      - "requirements.txt"
+      - ".github/workflows/ci-p11-dast.yml"
+  pull_request:
+    paths:
+      - "app/**"
+      - "requirements.txt"
+      - ".github/workflows/ci-p11-dast.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dast_p11:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run app (uvicorn)
+        run: |
+          nohup uvicorn app.main:app --host 127.0.0.1 --port 8080 > uvicorn.log 2>&1 &
+          echo "Waiting for service to become healthy..."
+          timeout 60 bash -c 'until curl -sf http://127.0.0.1:8080/health > /dev/null; do sleep 1; done'
+          echo "Service is up"
+
+      - name: Prepare evidence dir + fix permissions
+        run: |
+          mkdir -p EVIDENCE/P11
+          chmod -R a+w "$GITHUB_WORKSPACE"
+          chmod -R a+w EVIDENCE/P11
+          ls -lah
+
+      - name: Run OWASP ZAP baseline (docker)
+        run: |
+          set -euxo pipefail
+
+          # ВАЖНО: -r и -J без путей (только имена файлов),
+          # иначе baseline-скрипт "склеивает" путь с reportDir и ломается.
+          docker run --rm --network host --user 0:0 \
+            -v "$GITHUB_WORKSPACE:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+              -t http://127.0.0.1:8080/ \
+              -r zap_baseline.html \
+              -J zap_baseline.json \
+              -I -d || true
+
+          echo "Workspace after ZAP:"
+          ls -lah
+
+          mkdir -p EVIDENCE/P11
+          if [ -f zap_baseline.html ]; then mv -f zap_baseline.html EVIDENCE/P11/; fi
+          if [ -f zap_baseline.json ]; then mv -f zap_baseline.json EVIDENCE/P11/; fi
+
+          echo "EVIDENCE/P11 after moving reports:"
+          ls -lah EVIDENCE/P11
+
+          # Теперь проверяем уже в EVIDENCE/P11
+          test -f EVIDENCE/P11/zap_baseline.html
+          test -f EVIDENCE/P11/zap_baseline.json
+
+      - name: Move uvicorn log to EVIDENCE/P11
+        if: always()
+        run: |
+          mkdir -p EVIDENCE/P11
+          if [ -f uvicorn.log ]; then mv -f uvicorn.log EVIDENCE/P11/; fi
+          ls -lah EVIDENCE/P11 || true
+
+      - name: Upload P11 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: P11_EVIDENCE
+          path: EVIDENCE/P11
