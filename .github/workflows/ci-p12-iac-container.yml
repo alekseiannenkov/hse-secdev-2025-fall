@@ -77,41 +77,22 @@ jobs:
       # -------------------------
       # C2: Checkov (IaC)
       # -------------------------
-      - name: Checkov (IaC scan - docker compose)
+      - name: Checkov (IaC scan - Kubernetes)
         run: |
           set -eux
           mkdir -p EVIDENCE/P12
 
-          COMPOSE_FILE="$(find . -maxdepth 3 -type f \( \
-              -name 'docker-compose.yml' -o -name 'docker-compose.yaml' -o \
-              -name 'compose.yml' -o -name 'compose.yaml' -o \
-              -name 'docker-compose*.yml' -o -name 'docker-compose*.yaml' \
-            \) | head -n 1 || true)"
-
-          if [ -z "$COMPOSE_FILE" ]; then
-            echo '{"error":"No docker-compose/compose file found for Checkov"}' > EVIDENCE/P12/checkov_report.json
-            exit 0
-          fi
-
-          echo "Checkov will scan: $COMPOSE_FILE"
-
-          # Пишем stdout в файл, stderr в отдельный лог (чтобы не было 0 байт)
           docker run --rm -v "$PWD:/work:rw" bridgecrew/checkov:latest \
-            --framework docker_compose \
-            --config-file /work/security/checkov.yaml \
-            -f "/work/${COMPOSE_FILE#./}" \
+            --framework kubernetes \
+            -d /work/k8s \
             -o json \
             --soft-fail \
-            > EVIDENCE/P12/checkov_report.json \
-            2> EVIDENCE/P12/checkov_stderr.log || true
+            --output-file-path /work/EVIDENCE/P12/checkov_report.json \
+            2> /work/EVIDENCE/P12/checkov_stderr.log || true
 
           if [ ! -s EVIDENCE/P12/checkov_report.json ]; then
-            echo '{"error":"Checkov produced empty output; see EVIDENCE/P12/checkov_stderr.log"}' \
-              > EVIDENCE/P12/checkov_report.json
+            echo '{"error":"Checkov produced empty output; see checkov_stderr.log"}' > EVIDENCE/P12/checkov_report.json
           fi
-
-          ls -lah EVIDENCE/P12/checkov_report.json
-          ls -lah EVIDENCE/P12/checkov_stderr.log || true
 
       # -------------------------
       # C3: Trivy (image)
